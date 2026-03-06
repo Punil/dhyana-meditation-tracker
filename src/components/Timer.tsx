@@ -103,7 +103,7 @@ export function Timer() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 pb-32 relative">
+    <div className="flex flex-col items-center justify-start min-h-full px-4 pt-8 pb-48 relative w-full">
       {isCompleted && <Confetti numberOfPieces={200} recycle={false} />}
       
       <div className="mb-8 text-center">

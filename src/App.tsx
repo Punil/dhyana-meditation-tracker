@@ -50,8 +50,8 @@ export default function App() {
           </button>
         </div>
         
-        <div className="absolute bottom-8 text-xs text-gray-400 font-mono">
-          Tap to begin your journey
+        <div className="absolute bottom-24 mb-safe text-xs text-gray-400 font-mono text-center px-4">
+          Enter the sanctum sanctorum of the man-mandir
         </div>
       </div>
     );

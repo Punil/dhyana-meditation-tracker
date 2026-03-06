@@ -1,11 +1,31 @@
-<div align="center">
+# Dhyana Meditation App
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A beautiful, serene meditation timer and tracker built with React and Capacitor.
 
-  <h1>Built with AI Studio</h2>
+## Features
+- Timed and Open meditation modes
+- Progress tracking with charts
+- History log
+- Native mobile support (Android & iOS)
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Getting Started
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+1.  Install dependencies:
+    ```bash
+    npm install
+    ```
 
-</div>
+2.  Start the development server:
+    ```bash
+    npm run dev
+    ```
+
+## Building for Mobile
+
+This project uses Capacitor to build native mobile apps.
+
+### Android
+See [ANDROID_BUILD_INSTRUCTIONS.md](./ANDROID_BUILD_INSTRUCTIONS.md) for details.
+
+### iOS
+See [IOS_BUILD_INSTRUCTIONS.md](./IOS_BUILD_INSTRUCTIONS.md) for details.

@@ -65,24 +65,57 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const updateMediaSession = (time: number) => {
     if ('mediaSession' in navigator) {
       const formatted = formatTime(time);
+      
+      // Throttle metadata updates to avoid flickering or performance issues
+      // But we need it every second for the title.
+      // Some devices might prefer setPositionState for the progress bar.
+      
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: `Dhyana - ${formatted}`,
-        artist: mode === 'timed' ? 'Timed Meditation' : 'Open Meditation',
+        title: mode === 'timed' ? `Remaining: ${formatted}` : `Elapsed: ${formatted}`,
+        artist: 'Dhyana Meditation',
         album: 'Sanctum Sanctorum',
         artwork: [
           { src: 'https://cdn-icons-png.flaticon.com/512/2913/2913520.png', sizes: '512x512', type: 'image/png' }
         ]
       });
+
+      // Update playback state
+      navigator.mediaSession.playbackState = isActive ? 'playing' : 'paused';
+
+      // Update position state if supported (for progress bar on lock screen)
+      if ('setPositionState' in navigator.mediaSession) {
+        try {
+          const totalDuration = mode === 'timed' ? duration * 60 : 86400; // 24h for open mode
+          const currentPosition = mode === 'timed' 
+            ? Math.max(0, Math.min(totalDuration, totalDuration - time)) // Elapsed time in timed mode
+            : Math.min(totalDuration, time); // Elapsed time in open mode
+
+          navigator.mediaSession.setPositionState({
+            duration: totalDuration,
+            playbackRate: isActive ? 1 : 0,
+            position: currentPosition,
+          });
+        } catch (e) {
+          console.error('Error setting position state:', e);
+        }
+      }
     }
   };
 
   const showNotification = () => {
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Dhyana Meditation', {
-        body: 'Your meditation session is complete. Namaste.',
-        icon: 'https://cdn-icons-png.flaticon.com/512/2913/2913520.png',
-        silent: false,
-      });
+      try {
+        new Notification('Dhyana Meditation', {
+          body: 'Your meditation session is complete. Namaste.',
+          icon: 'https://cdn-icons-png.flaticon.com/512/2913/2913520.png',
+          silent: false,
+          requireInteraction: true,
+          tag: 'dhyana-completion',
+          renotify: true,
+        } as NotificationOptions);
+      } catch (e) {
+        console.error("Notification error:", e);
+      }
     }
   };
 
@@ -102,22 +135,17 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       }
 
       if (silentAudioRef.current) {
-        silentAudioRef.current.play().catch(() => {
-          // User interaction might be needed first, handled by start button
-        });
+        const playPromise = silentAudioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error("Silent audio play failed:", error);
+          });
+        }
       }
 
       intervalRef.current = setInterval(() => {
         const now = Date.now();
         // Calculate total time elapsed since start, minus any paused duration
-        // logic: (now - start) is total wall clock time passed.
-        // We need to subtract pausedTimeRef to get actual active time?
-        // Wait, the previous logic was:
-        // delta = (now - startTime)
-        // currentTotal = delta + pausedTime
-        // This implies startTime is reset on every resume?
-        // Let's stick to the previous logic which seemed correct for "resume" behavior
-        // where startTimeRef is updated on resume.
         
         const delta = Math.floor((now - (startTimeRef.current || now)) / 1000);
         const currentTotal = delta + pausedTimeRef.current;
@@ -156,10 +184,22 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     setIsCompleted(false);
     startTimeRef.current = Date.now(); // Reset start time for this segment
     playSound('chorus-bell');
-    if (silentAudioRef.current) silentAudioRef.current.play();
+    
+    if (silentAudioRef.current) {
+      const playPromise = silentAudioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error("Silent audio play failed:", error);
+        });
+      }
+    }
+    
+    // Ensure media session is updated immediately
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'playing';
-      updateMediaSession(mode === 'timed' ? timeLeft : elapsedTime);
+      // Use current timeLeft or elapsedTime
+      const currentTime = mode === 'timed' ? timeLeft : elapsedTime;
+      updateMediaSession(currentTime);
     }
   };
 
@@ -169,6 +209,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const delta = Math.floor((now - (startTimeRef.current || now)) / 1000);
     pausedTimeRef.current += delta;
     startTimeRef.current = null; // Clear start time so we know to reset it on resume
+    
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+      // Use current timeLeft or elapsedTime
+      const currentTime = mode === 'timed' ? timeLeft : elapsedTime;
+      updateMediaSession(currentTime);
+    }
   };
 
   const stopSession = () => {

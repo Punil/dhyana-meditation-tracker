@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Square, Timer as TimerIcon, Infinity as InfinityIcon, CheckCircle } from 'lucide-react';
 import { useMeditation } from '../hooks/useMeditation';
-import { playSound } from '../utils/utils';
+import { playSound, formatTime } from '../utils/utils';
 import Confetti from 'react-confetti';
 
 export function Timer() {
@@ -13,6 +13,58 @@ export function Timer() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0); // For open mode
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const pausedTimeRef = useRef<number>(0);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize silent audio and request notification permission
+  useEffect(() => {
+    const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+    audio.loop = true;
+    silentAudioRef.current = audio;
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('play', () => startSession());
+      navigator.mediaSession.setActionHandler('pause', () => pauseSession());
+      navigator.mediaSession.setActionHandler('stop', () => stopSession());
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    return () => {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+      }
+    };
+  }, []);
+
+  const showNotification = () => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Dhyana Meditation', {
+        body: 'Your meditation session is complete. Namaste.',
+        icon: 'https://cdn-icons-png.flaticon.com/512/2913/2913520.png',
+        silent: false,
+      });
+    }
+  };
+
+  // Update Media Session metadata
+  const updateMediaSession = (time: number) => {
+    if ('mediaSession' in navigator) {
+      const formatted = formatTime(time);
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `Dhyana - ${formatted}`,
+        artist: mode === 'timed' ? 'Timed Meditation' : 'Open Meditation',
+        album: 'Sanctum Sanctorum',
+        artwork: [
+          { src: 'https://cdn-icons-png.flaticon.com/512/2913/2913520.png', sizes: '512x512', type: 'image/png' }
+        ]
+      });
+    }
+  };
 
   // Reset timer when duration changes
   useEffect(() => {
@@ -23,21 +75,35 @@ export function Timer() {
 
   useEffect(() => {
     if (isActive) {
+      startTimeRef.current = Date.now();
+      if (silentAudioRef.current) {
+        silentAudioRef.current.play().catch(() => {
+          // User interaction might be needed first, handled by start button
+        });
+      }
       intervalRef.current = setInterval(() => {
+        const now = Date.now();
+        const delta = Math.floor((now - (startTimeRef.current || now)) / 1000);
+        const currentTotal = delta + pausedTimeRef.current;
+
         if (mode === 'timed') {
-          setTimeLeft((prev) => {
-            if (prev <= 1) {
-              completeSession();
-              return 0;
-            }
-            return prev - 1;
-          });
+          const remaining = Math.max(0, duration * 60 - currentTotal);
+          setTimeLeft(remaining);
+          updateMediaSession(remaining);
+          if (remaining <= 0) {
+            completeSession();
+          }
         } else {
-          setElapsedTime((prev) => prev + 1);
+          setElapsedTime(currentTotal);
+          updateMediaSession(currentTotal);
         }
       }, 1000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (silentAudioRef.current) silentAudioRef.current.pause();
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -45,40 +111,53 @@ export function Timer() {
   }, [isActive, mode]);
 
   const startSession = () => {
+    // Request notification permission if not already granted
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     setIsActive(true);
     setIsCompleted(false);
+    startTimeRef.current = Date.now();
     playSound('chorus-bell');
+    if (silentAudioRef.current) silentAudioRef.current.play();
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'playing';
+      updateMediaSession(mode === 'timed' ? timeLeft : elapsedTime);
+    }
   };
 
   const pauseSession = () => {
     setIsActive(false);
+    const now = Date.now();
+    const delta = Math.floor((now - (startTimeRef.current || now)) / 1000);
+    pausedTimeRef.current += delta;
   };
 
   const stopSession = () => {
     setIsActive(false);
-    if (mode === 'open') {
-      completeSession();
-    } else {
-      // If timed and stopped early, ask to save or discard? 
-      // For simplicity, we'll just save what was done if > 1 minute
-      const timeSpent = duration * 60 - timeLeft;
-      if (timeSpent > 60) {
-        saveSession(Math.floor(timeSpent / 60));
-      }
-      playSound('chorus-bell');
-      resetTimer();
+    playSound('chorus-bell');
+    const now = Date.now();
+    const delta = Math.floor((now - (startTimeRef.current || now)) / 1000);
+    const totalMins = Math.floor((pausedTimeRef.current + delta) / 60);
+    
+    if (totalMins > 0) {
+      saveSession(totalMins);
     }
+    resetTimer();
   };
 
   const completeSession = () => {
     setIsActive(false);
     setIsCompleted(true);
     playSound('chorus-bell');
+    showNotification();
     
     const minutes = mode === 'timed' ? duration : Math.floor(elapsedTime / 60);
     if (minutes > 0) {
       saveSession(minutes);
     }
+    pausedTimeRef.current = 0;
   };
 
   const saveSession = (mins: number) => {
@@ -94,12 +173,11 @@ export function Timer() {
     setIsCompleted(false);
     setTimeLeft(duration * 60);
     setElapsedTime(0);
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    pausedTimeRef.current = 0;
+    startTimeRef.current = null;
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'none';
+    }
   };
 
   return (
@@ -186,7 +264,7 @@ export function Timer() {
           <input
             type="range"
             min="1"
-            max="60"
+            max="120"
             value={duration}
             onChange={(e) => setDuration(parseInt(e.target.value))}
             className="w-full h-2 bg-pink-200 rounded-lg appearance-none cursor-pointer accent-pink-500"

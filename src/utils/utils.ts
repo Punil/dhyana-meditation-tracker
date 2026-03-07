@@ -7,16 +7,27 @@ export function cn(...inputs: ClassValue[]) {
 
 // Simple audio context wrapper for synthesized sounds if needed, 
 // or just HTMLAudioElement helpers.
-export const playSound = (type: 'om' | 'bell' | 'shankh' | 'chorus-bell') => {
-  // In a real app, these would be actual audio files. 
-  // For this demo, we'll try to use some online free assets or synthesized sounds.
-  // Since we can't guarantee external URL availability, we'll use a simple oscillator for the bell
-  // and a placeholder for the complex sounds if possible, or just visual feedback + simple tone.
-  
-  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-  if (!AudioContext) return;
+let audioCtx: AudioContext | null = null;
 
-  const ctx = new AudioContext();
+export const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
+export const playSound = (type: 'om' | 'bell' | 'shankh' | 'chorus-bell') => {
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  if (!audioCtx) {
+    audioCtx = new AudioContextClass();
+  }
+
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+
+  const ctx = audioCtx;
 
   if (type === 'chorus-bell') {
     // 1. Play Bell (Bright, clear start)

@@ -6,8 +6,9 @@ import { Progress } from './components/Progress';
 import { Settings } from './components/Settings';
 import { playSound } from './utils/utils';
 import { Flower } from 'lucide-react';
+import { TimerProvider } from './context/TimerContext';
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState<'timer' | 'history' | 'progress' | 'settings'>('timer');
   const [hasStarted, setHasStarted] = useState(false);
 
@@ -64,5 +65,13 @@ export default function App() {
       {activeTab === 'progress' && <Progress />}
       {activeTab === 'settings' && <Settings />}
     </Layout>
+  );
+}
+
+export default function App() {
+  return (
+    <TimerProvider>
+      <AppContent />
+    </TimerProvider>
   );
 }
